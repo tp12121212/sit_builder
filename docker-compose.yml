@@ -1,0 +1,73 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: sitbuilder
+      POSTGRES_USER: sitbuilder
+      POSTGRES_PASSWORD: sitbuilder
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://sitbuilder:sitbuilder@postgres:5432/sitbuilder
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      STORAGE_ROOT: /app/data
+      DEFAULT_TENANT_NAME: Default Tenant
+      DEFAULT_USER_EMAIL: admin@example.com
+      DEFAULT_USER_NAME: Local Admin
+      DEFAULT_USER_ROLE: ADMIN
+      SENTENCE_TRANSFORMER_POWERSHELL_SCRIPT: /app/scripts/textExctraction.ps1
+      SENTENCE_TRANSFORMER_PYTHON_SCRIPT: /app/scripts/keyword_extraction.py
+      SENTENCE_TRANSFORMER_PYTHON_EXECUTABLE: python3
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - "8000:8000"
+
+  worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: celery -A app.workers.worker.celery_app worker --loglevel=info
+    environment:
+      DATABASE_URL: postgresql+psycopg://sitbuilder:sitbuilder@postgres:5432/sitbuilder
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      STORAGE_ROOT: /app/data
+      SENTENCE_TRANSFORMER_POWERSHELL_SCRIPT: /app/scripts/textExctraction.ps1
+      SENTENCE_TRANSFORMER_PYTHON_SCRIPT: /app/scripts/keyword_extraction.py
+      SENTENCE_TRANSFORMER_PYTHON_EXECUTABLE: python3
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - postgres
+      - redis
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    environment:
+      VITE_API_BASE: http://localhost:8000/v1
+    depends_on:
+      - api
+    ports:
+      - "5173:5173"
+
+volumes:
+  postgres_data:
